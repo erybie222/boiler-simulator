@@ -1,5 +1,12 @@
 from dataclasses import dataclass
 import pandas as pd
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+
 
 @dataclass
 class BoilerParams:
@@ -118,4 +125,138 @@ def simulate_boiler_pi(
         "power": P_hist,
         "q_out": q_hist,
     })
+
+
+# ======= PARAMETRY DOMYŚLNE / FUNKCJA POMOCNICZA DO SYMULACJI =======
+
+params_default = BoilerParams(
+    C=400_000.0,
+    k_loss=15.0,
+    k_draw=3_000.0,
+    T_out=22.0,
+    T_cold=10.0,
+)
+
+DT = 1.0
+TOTAL_TIME = 3600
+P_MAX = 2000.0
+
+
+def q_out_profile_default(t: float) -> float:
+    # prosty prysznic: od 600s do 1800s pobór 0.1 l/s
+    if 600 <= t <= 1800:
+        return 0.1
+    return 0.0
+
+
+def run_simulation(T_set: float, Kp: float, Ti: float) -> pd.DataFrame:
+    return simulate_boiler_pi(
+        T_set=T_set,
+        Kp=Kp,
+        Ti=Ti,
+        params=params_default,
+        dt=DT,
+        total_time=TOTAL_TIME,
+        P_max=P_MAX,
+        q_out_profile=q_out_profile_default,
+    )
+
+
+# ======================= APLIKACJA DASH =======================
+
+app = dash.Dash(__name__)
+
+app.layout = html.Div(
+    style={"maxWidth": "900px", "margin": "0 auto", "fontFamily": "Arial"},
+    children=[
+        html.H1("Symulacja bojlera", style={"textAlign": "center"}),
+
+        html.Div([
+            html.Label("T[°C]"),
+            dcc.Slider(
+                id="slider-T-set",
+                min=30,
+                max=70,
+                step=1,
+                value=45,
+                marks={i: str(i) for i in range(30, 71, 5)},
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
+
+            html.Br(),
+            html.Label("Kp"),
+            dcc.Slider(
+                id="slider-Kp",
+                min=0.5,
+                max=10.0,
+                step=0.1,
+                value=2.0,
+                marks={i: str(i) for i in range(1, 11)},
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
+
+            html.Br(),
+            html.Label("Ti[s]"),
+            dcc.Slider(
+                id="slider-Ti",
+                min=0,
+                max=2000,
+                step=50,
+                value=600,
+                marks={0: "0", 600: "600", 1200: "1200", 2000: "2000"},
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
+        ], style={"marginBottom": "40px"}),
+
+        dcc.Graph(id="boiler-graph", style={"height": "900px"}),
+    ]
+)
+
+
+@app.callback(
+    Output("boiler-graph", "figure"),
+    [
+        Input("slider-T-set", "value"),
+        Input("slider-Kp", "value"),
+        Input("slider-Ti", "value"),
+    ]
+)
+def update_graph(T_set, Kp, Ti):
+    # dla Ti=0 robimy regulator P (w simulate_boiler_pi jest to obsłużone)
+    df = run_simulation(T_set=float(T_set), Kp=float(Kp), Ti=float(Ti))
+
+    fig = make_subplots(
+        rows=3, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.12,
+        subplot_titles=(
+            f"Temperatura wody [°C]",
+            "Moc grzałki [W]",
+            "Pobór wody [l/s]"
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(x=df["time"], y=df["temperature"], name="Temperatura"),
+        row=1, col=1
+    )
+
+    fig.add_trace(
+        go.Scatter(x=df["time"], y=df["power"], name="Moc grzałki"),
+        row=2, col=1
+    )
+
+    fig.add_trace(
+        go.Scatter(x=df["time"], y=df["q_out"], name="Pobór wody"),
+        row=3, col=1
+    )
+
+    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=1, col=1)
+    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=2, col=1)
+    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=3, col=1)
+
+    return fig
+
+if __name__ == "__main__":
+    app.run(debug=True)
 

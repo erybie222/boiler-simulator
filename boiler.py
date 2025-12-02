@@ -126,9 +126,6 @@ def simulate_boiler_pi(
         "q_out": q_hist,
     })
 
-
-# ======= PARAMETRY DOMYŚLNE / FUNKCJA POMOCNICZA DO SYMULACJI =======
-
 params_default = BoilerParams(
     C=400_000.0,
     k_loss=15.0,
@@ -161,8 +158,6 @@ def run_simulation(T_set: float, Kp: float, Ti: float) -> pd.DataFrame:
         q_out_profile=q_out_profile_default,
     )
 
-
-# ======================= APLIKACJA DASH =======================
 
 app = dash.Dash(__name__)
 
@@ -222,7 +217,6 @@ app.layout = html.Div(
     ]
 )
 def update_graph(T_set, Kp, Ti):
-    # dla Ti=0 robimy regulator P (w simulate_boiler_pi jest to obsłużone)
     df = run_simulation(T_set=float(T_set), Kp=float(Kp), Ti=float(Ti))
 
     fig = make_subplots(

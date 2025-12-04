@@ -1,11 +1,5 @@
 from dataclasses import dataclass
 import pandas as pd
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
-
-import dash
-from dash import dcc, html
-from dash.dependencies import Input, Output
 
 
 @dataclass
@@ -49,19 +43,24 @@ def boiler_step(T: float,
     return T_next
 
 
-def simulate_boiler_pi(
+def simulate_boiler_pid(
     T_set: float,
     Kp: float,
     Ti: float,
+    Td: float,
     params: BoilerParams,
     dt: float,
     total_time: float,
     P_max: float,
-    q_out_profile=None,  # funkcja lub stała; na start może być 0
+    q_out_profile=None,
 ) -> pd.DataFrame:
     """
-    Symulacja bojlera z regulatorem PI.
+    Symulacja bojlera z regulatorem PID.
     Zwraca DataFrame: time, temperature, power, q_out.
+
+    Równania regulatora PID:
+    u(t) = Kp * e(t) + Ki * integral(e) + Kd * de/dt
+    gdzie: Ki = Kp/Ti, Kd = Kp*Td
     """
     n = int(total_time / dt)
 
@@ -74,41 +73,58 @@ def simulate_boiler_pi(
     q_hist = [0.0]
 
     integ = 0.0  # całka błędu
+    e_prev = 0.0  # poprzedni błąd (dla członu D)
 
     for k in range(n):
         t = (k + 1) * dt
 
-        # --- profil poboru wody q_out(t) ---
         if callable(q_out_profile):
             q_out = q_out_profile(t)
         elif q_out_profile is None:
-            q_out = 0.0  # brak poboru
+            q_out = 0.0
         else:
-            q_out = float(q_out_profile)  # stała wartość
+            q_out = float(q_out_profile)
 
-        # --- błąd temperatury ---
+        # błąd regulacji
         e = T_set - T
 
-        # --- anti-windup: przewidywane sterowanie przed nasyceniem ---
+        # --- człon P (proporcjonalny) ---
+        P_term = Kp * e
+
+        # --- człon I (całkujący) z anti-windup ---
+        # Anti-windup: nie całkuj gdy sterowanie jest nasycone
         if Ti > 0.0:
-            will_integ = True
-            u_pred = Kp * (e + integ / Ti)
-
-            if u_pred >= P_max and e > 0:
-                will_integ = False
-            if u_pred <= 0.0 and e < 0:
-                will_integ = False
-
-            if will_integ:
+            Ki = Kp / Ti
+            # Sprawdź czy sterowanie będzie nasycone
+            u_test = Kp * e + Ki * integ
+            if 0.0 < u_test < P_max:
+                # Brak nasycenia - normalnie całkuj
                 integ += e * dt
-
-        # --- wyjście PI + nasycenie ---
-        if Ti > 0.0:
-            u = Kp * (e + integ / Ti)
+            elif u_test >= P_max and e < 0:
+                # Nasycenie górne, ale błąd ujemny - całkuj (pomaga zejść)
+                integ += e * dt
+            elif u_test <= 0.0 and e > 0:
+                # Nasycenie dolne, ale błąd dodatni - całkuj (pomaga wyjść)
+                integ += e * dt
+            I_term = Ki * integ
         else:
-            u = Kp * e  # czysty P, gdyby Ti==0
+            I_term = 0.0
 
+        # --- człon D (różniczkujący) ---
+        if Td > 0.0:
+            Kd = Kp * Td
+            D_term = Kd * (e - e_prev) / dt
+        else:
+            D_term = 0.0
+
+        # --- wyjście PID ---
+        u = P_term + I_term + D_term
+
+        # --- nasycenie (ograniczenie mocy grzałki) ---
         P_in = max(0.0, min(u, P_max))
+
+        # zapamiętaj błąd dla następnej iteracji
+        e_prev = e
 
         # --- fizyka bojlera (jeden krok) ---
         T = boiler_step(T, P_in, q_out, params, dt)
@@ -126,16 +142,19 @@ def simulate_boiler_pi(
         "q_out": q_hist,
     })
 
+# Parametry dla bojlera 50L:
+# C = 50 kg * 4186 J/(kg·°C) ≈ 209300 J/°C
+# Grzałka: 2000W (typowa dla małych bojlerów)
 params_default = BoilerParams(
-    C=400_000.0,
-    k_loss=15.0,
-    k_draw=3_000.0,
-    T_out=22.0,
-    T_cold=10.0,
+    C=209_300.0,       # pojemność cieplna dla 50L wody
+    k_loss=5.0,        # straty ciepła do otoczenia (izolacja)
+    k_draw=4_186.0,    # ~c_wody * 1 kg/s przy przepływie 1 l/s
+    T_out=22.0,        # temperatura otoczenia
+    T_cold=10.0,       # temperatura zimnej wody
 )
 
 DT = 1.0
-TOTAL_TIME = 3600
+TOTAL_TIME = 18000  # 2 godziny symulacji
 P_MAX = 2000.0
 
 
@@ -146,11 +165,12 @@ def q_out_profile_default(t: float) -> float:
     return 0.0
 
 
-def run_simulation(T_set: float, Kp: float, Ti: float) -> pd.DataFrame:
-    return simulate_boiler_pi(
+def run_simulation(T_set: float, Kp: float, Ti: float, Td: float = 0.0) -> pd.DataFrame:
+    return simulate_boiler_pid(
         T_set=T_set,
         Kp=Kp,
         Ti=Ti,
+        Td=Td,
         params=params_default,
         dt=DT,
         total_time=TOTAL_TIME,
@@ -158,99 +178,4 @@ def run_simulation(T_set: float, Kp: float, Ti: float) -> pd.DataFrame:
         q_out_profile=q_out_profile_default,
     )
 
-
-app = dash.Dash(__name__)
-
-app.layout = html.Div(
-    style={"maxWidth": "900px", "margin": "0 auto", "fontFamily": "Arial"},
-    children=[
-        html.H1("Symulacja bojlera", style={"textAlign": "center"}),
-
-        html.Div([
-            html.Label("T[°C]"),
-            dcc.Slider(
-                id="slider-T-set",
-                min=30,
-                max=70,
-                step=1,
-                value=45,
-                marks={i: str(i) for i in range(30, 71, 5)},
-                tooltip={"placement": "bottom", "always_visible": True},
-            ),
-
-            html.Br(),
-            html.Label("Kp"),
-            dcc.Slider(
-                id="slider-Kp",
-                min=0.5,
-                max=10.0,
-                step=0.1,
-                value=2.0,
-                marks={i: str(i) for i in range(1, 11)},
-                tooltip={"placement": "bottom", "always_visible": True},
-            ),
-
-            html.Br(),
-            html.Label("Ti[s]"),
-            dcc.Slider(
-                id="slider-Ti",
-                min=0,
-                max=2000,
-                step=50,
-                value=600,
-                marks={0: "0", 600: "600", 1200: "1200", 2000: "2000"},
-                tooltip={"placement": "bottom", "always_visible": True},
-            ),
-        ], style={"marginBottom": "40px"}),
-
-        dcc.Graph(id="boiler-graph", style={"height": "900px"}),
-    ]
-)
-
-
-@app.callback(
-    Output("boiler-graph", "figure"),
-    [
-        Input("slider-T-set", "value"),
-        Input("slider-Kp", "value"),
-        Input("slider-Ti", "value"),
-    ]
-)
-def update_graph(T_set, Kp, Ti):
-    df = run_simulation(T_set=float(T_set), Kp=float(Kp), Ti=float(Ti))
-
-    fig = make_subplots(
-        rows=3, cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.12,
-        subplot_titles=(
-            f"Temperatura wody [°C]",
-            "Moc grzałki [W]",
-            "Pobór wody [l/s]"
-        )
-    )
-
-    fig.add_trace(
-        go.Scatter(x=df["time"], y=df["temperature"], name="Temperatura"),
-        row=1, col=1
-    )
-
-    fig.add_trace(
-        go.Scatter(x=df["time"], y=df["power"], name="Moc grzałki"),
-        row=2, col=1
-    )
-
-    fig.add_trace(
-        go.Scatter(x=df["time"], y=df["q_out"], name="Pobór wody"),
-        row=3, col=1
-    )
-
-    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=1, col=1)
-    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=2, col=1)
-    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=3, col=1)
-
-    return fig
-
-if __name__ == "__main__":
-    app.run(debug=True)
 

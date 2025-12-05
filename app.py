@@ -61,6 +61,42 @@ app.layout = html.Div(
                 marks={0: "0", 25: "25", 50: "50", 75: "75", 100: "100"},
                 tooltip={"placement": "bottom", "always_visible": True},
             ),
+
+            html.Br(),
+            html.Label("Maksymalna moc grzałki - Pmax[W]"),
+            dcc.Slider(
+                id="slider-Pmax",
+                min=1500,
+                max=4000,
+                step=100,
+                value=2000,
+                marks={i: str(i) for i in range(1500, 4001, 500)},
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
+
+            html.Br(),
+            html.Label("Pojemność bojlera - V[L]"),
+            dcc.Slider(
+                id="slider-volume",
+                min=30,
+                max=150,
+                step=5,
+                value=50,
+                marks={i: str(i) for i in range(30, 151, 20)},
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
+
+            html.Br(),
+            html.Label("Pobór ciepłej wody - q [l/min]"),
+            dcc.Slider(
+                id="slider-qout-lpm",
+                min=0,
+                max=20,
+                step=0.5,
+                value=6.0,
+                marks={i: str(i) for i in range(0, 21, 5)},
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
         ], style={"marginBottom": "40px"}),
 
         dcc.Graph(id="boiler-graph", style={"height": "900px"}),
@@ -75,10 +111,21 @@ app.layout = html.Div(
         Input("slider-Kp", "value"),
         Input("slider-Ti", "value"),
         Input("slider-Td", "value"),
+        Input("slider-Pmax", "value"),
+        Input("slider-volume", "value"),
+        Input("slider-qout-lpm", "value"),
     ]
 )
-def update_graph(T_set, Kp, Ti, Td):
-    df = run_simulation(T_set=float(T_set), Kp=float(Kp), Ti=float(Ti), Td=float(Td))
+def update_graph(T_set, Kp, Ti, Td, Pmax, volume, qout_lpm):
+    df = run_simulation(
+        T_set=float(T_set),
+        Kp=float(Kp),
+        Ti=float(Ti),
+        Td=float(Td),
+        P_max=float(Pmax),
+        volume_l=float(volume),
+        flow_l_per_min=float(qout_lpm),
+    )
 
     fig = make_subplots(
         rows=3, cols=1,

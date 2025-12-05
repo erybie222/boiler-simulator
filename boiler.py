@@ -165,17 +165,51 @@ def q_out_profile_default(t: float) -> float:
     return 0.0
 
 
-def run_simulation(T_set: float, Kp: float, Ti: float, Td: float = 0.0) -> pd.DataFrame:
+def make_q_out_profile(flow_lps: float, start_s: float, end_s: float):
+    def _profile(t: float) -> float:
+        if start_s <= t <= end_s:
+            return flow_lps
+        return 0.0
+    return _profile
+
+
+def run_simulation(
+    T_set: float,
+    Kp: float,
+    Ti: float,
+    Td: float = 0.0,
+    P_max: float = P_MAX,
+    volume_l: float = 50.0,
+    flow_l_per_min: float = 6.0,
+    shower_start_s: float = 10000.0,
+    shower_end_s: float = 12000.0,
+) -> pd.DataFrame:
+    # Przelicz pojemność cieplną wody na podstawie objętości [L]
+    # Zakładamy gęstość ~1 kg/L oraz ciepło właściwe wody ~4186 J/(kg·°C)
+    C_dynamic = float(volume_l) * 4186.0
+
+    params_dynamic = BoilerParams(
+        C=C_dynamic,
+        k_loss=params_default.k_loss,
+        k_draw=params_default.k_draw,
+        T_out=params_default.T_out,
+        T_cold=params_default.T_cold,
+    )
+
+    # Zbuduj profil poboru na podstawie parametrów UI (l/min → l/s)
+    flow_lps = float(flow_l_per_min) / 60.0
+    q_profile = make_q_out_profile(flow_lps, float(shower_start_s), float(shower_end_s))
+
     return simulate_boiler_pid(
         T_set=T_set,
         Kp=Kp,
         Ti=Ti,
         Td=Td,
-        params=params_default,
+        params=params_dynamic,
         dt=DT,
         total_time=TOTAL_TIME,
-        P_max=P_MAX,
-        q_out_profile=q_out_profile_default,
+        P_max=P_max,
+        q_out_profile=q_profile,
     )
 
 

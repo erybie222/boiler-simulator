@@ -91,23 +91,12 @@ def simulate_boiler_pid(
         # --- człon P (proporcjonalny) ---
         P_term = Kp * e
 
-        # --- człon I (całkujący) z anti-windup ---
-        # Anti-windup: nie całkuj gdy sterowanie jest nasycone
+        # --- człon I (całkujący) ---
         if Ti > 0.0:
             Ki = Kp / Ti
-            # Sprawdź czy sterowanie będzie nasycone
-            u_test = Kp * e + Ki * integ
-            if 0.0 < u_test < P_max:
-                # Brak nasycenia - normalnie całkuj
-                integ += e * dt
-            elif u_test >= P_max and e < 0:
-                # Nasycenie górne, ale błąd ujemny - całkuj (pomaga zejść)
-                integ += e * dt
-            elif u_test <= 0.0 and e > 0:
-                # Nasycenie dolne, ale błąd dodatni - całkuj (pomaga wyjść)
-                integ += e * dt
             I_term = Ki * integ
         else:
+            Ki = 0.0
             I_term = 0.0
 
         # --- człon D (różniczkujący) ---
@@ -117,11 +106,28 @@ def simulate_boiler_pid(
         else:
             D_term = 0.0
 
-        # --- wyjście PID ---
+        # --- wyjście PID (przed nasyceniem) ---
         u = P_term + I_term + D_term
 
         # --- nasycenie (ograniczenie mocy grzałki) ---
         P_in = max(0.0, min(u, P_max))
+
+        # --- ANTI-WINDUP: back-calculation method ---
+        # Sprawdź czy jest nasycenie
+        is_saturated = (u > P_max) or (u < 0.0)
+
+        if Ti > 0.0 and Ki > 0.0:
+            if is_saturated:
+                # Nasycenie występuje - oblicz jaką całkę powinniśmy mieć aby P_in = u
+                # P_in = P_term + Ki * integ_desired + D_term
+                # integ_desired = (P_in - P_term - D_term) / Ki
+                integ = (P_in - P_term - D_term) / Ki
+            else:
+                # Brak nasycenia - aktualizuj całkę normalnie
+                integ += e * dt
+        elif Ti > 0.0:
+            # Normalny przypadek bez anti-windup (nie powinno się zdarzyć)
+            integ += e * dt
 
         # zapamiętaj błąd dla następnej iteracji
         e_prev = e
@@ -147,8 +153,8 @@ def simulate_boiler_pid(
 # Grzałka: 2000W (typowa dla małych bojlerów)
 params_default = BoilerParams(
     C=209_300.0,       # pojemność cieplna dla 50L wody
-    k_loss=5.0,        # straty ciepła do otoczenia (izolacja)
-    k_draw=4_186.0,    # ~c_wody * 1 kg/s przy przepływie 1 l/s
+    k_loss=40.0,       # straty ciepła do otoczenia - zwiększone dla większych strat
+    k_draw=200.0,      # współczynnik chłodzenia przy poborze - DRASTYCZNIE zmniejszone
     T_out=22.0,        # temperatura otoczenia
     T_cold=10.0,       # temperatura zimnej wody
 )

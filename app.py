@@ -30,11 +30,11 @@ app.layout = html.Div(
             html.Label("Wzmocnienie regulatora - Kp"),
             dcc.Slider(
                 id="slider-Kp",
-                min=10,
-                max=200,
-                step=5,
-                value=100,
-                marks={i: str(i) for i in range(0, 201, 50)},
+                min=1,
+                max=100,
+                step=1,
+                value=3,
+                marks={i: str(i) for i in range(0, 101, 20)},
                 tooltip={"placement": "bottom", "always_visible": True},
             ),
 
@@ -42,11 +42,11 @@ app.layout = html.Div(
             html.Label("Stała całkowania - Ti[s]"),
             dcc.Slider(
                 id="slider-Ti",
-                min=0,
+                min=10,
                 max=2000,
                 step=50,
-                value=600,
-                marks={0: "0", 600: "600", 1200: "1200", 2000: "2000"},
+                value=200,
+                marks={i: str(i) for i in range(0, 2001, 400)},
                 tooltip={"placement": "bottom", "always_visible": True},
             ),
 

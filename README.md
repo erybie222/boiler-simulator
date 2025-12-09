@@ -1,88 +1,98 @@
-Jasne, oto wyjaśnienie matematyczne i fizyczne działania symulacji bojlera z regulatorem PID, w formacie Markdown.
+# Symulacja Bojlera Elektrycznego z Regulacją PID
+
+Projekt ten implementuje numeryczną symulację termodynamiki elektrycznego podgrzewacza wody (bojlera) sterowanego algorytmem PID. Symulator modeluje zachowanie temperatury wody w czasie, uwzględniając bezwładność cieplną, straty energii do otoczenia oraz zakłócenia wynikające z poboru wody (np. prysznic).
+
+## 1. Model Matematyczny (Fizyka)
+
+Symulacja opiera się na **I Zasadzie Termodynamiki** (zasada zachowania energii). Zmiana temperatury wody w zbiorniku jest opisana równaniem różniczkowym bilansu mocy.
+
+### Równanie różniczkowe stanu
+Zmiana temperatury $T$ w czasie $t$ wyraża się wzorem:
+
+$$C \cdot \frac{dT}{dt} = P_{in}(t) - P_{loss}(t) - P_{draw}(t)$$
+
+Gdzie poszczególne składniki to:
+
+1.  **Moc dostarczona ($P_{in}$):** Sterowanie z grzałki (ograniczone do $P_{max}$).
+2.  **Straty postojowe ($P_{loss}$):** Wynikają z przenikania ciepła przez izolację (Prawo stygnięcia Newtona):
+    $$P_{loss} = k_{loss} \cdot (T(t) - T_{out})$$
+3.  **Straty przepływowe ($P_{draw}$):** Wynikają z wymiany ciepłej wody na zimną podczas poboru:
+    $$P_{draw} = k_{draw} \cdot q_{out}(t) \cdot (T(t) - T_{cold})$$
+
+### Dyskretyzacja (Metoda Eulera)
+Do symulacji komputerowej równanie ciągłe zostało zdyskretyzowane przy użyciu metody Eulera z krokiem czasowym $\Delta t$:
+
+$$T_{k+1} = T_k + \frac{P_{in} - P_{loss} - P_{draw}}{C} \cdot \Delta t$$
 
 ---
 
-# 📐 Matematyka i Fizyka Symulacji Bojlera z Regulatorem PID
+## 2. Algorytm Sterowania (PID)
 
-Symulacja łączy w sobie dwa główne elementy: **bilans energetyczny bojlera** (fizyka obiektu) oraz **algorytm regulatora PID** (matematyka sterowania), które oddziałują na siebie w dyskretnym czasie.
+Do utrzymania zadanej temperatury ($T_{set}$) wykorzystano regulator PID w wersji dyskretnej z mechanizmem **Anti-Windup**.
+
+Równanie sterowania:
+$$u(t) = P_{term} + I_{term} + D_{term}$$
+
+Gdzie poszczególne człony to:
+
+* **Proporcjonalny (P):** $K_p \cdot e(t)$
+* **Całkujący (I):** $\frac{K_p}{T_i} \cdot \sum (e(t) \cdot \Delta t)$
+* **Różniczkujący (D):** $K_p \cdot T_d \cdot \frac{e(t) - e(t-1)}{\Delta t}$
+
+Uchyb regulacji zdefiniowany jest jako: $e(t) = T_{set} - T(t)$.
+
+**Zabezpieczenia:**
+* **Nasycenie wyjścia:** Moc grzałki jest ograniczona do zakresu $[0, P_{max}]$.
+* **Anti-Windup (Clamping):** Całkowanie jest wstrzymywane, gdy regulator jest nasycony, aby zapobiec niekontrolowanemu wzrostowi członu I.
 
 ---
 
-## 1. ⚙️ Bilans Energetyczny Bojlera (`boiler_step`)
+## 3. Słownik Zmiennych i Parametrów
 
-Funkcja `boiler_step` modeluje zmianę temperatury wody $\Delta T$ w bojlerze w kroku czasowym $dt$, opierając się na bilansie mocy cieplnej.
+Poniższe tabele opisują wszystkie kluczowe zmienne użyte w kodzie Python.
 
-### A. Równanie Różniczkowe (model ciągły)
+### Klasa `BoilerParams` (Stałe fizyczne)
 
-Szybkość zmiany energii cieplnej $E$ w czasie jest równa sumie wszystkich mocy:
-
-$$\frac{dE}{dt} = P_{in} - P_{loss} - P_{draw}$$
-
-Ponieważ zmiana energii cieplnej w wodzie to $dE = C \cdot dT$ ($C$ to pojemność cieplna), możemy to zapisać jako:
-
-$$C \frac{dT}{dt} = P_{in} - P_{loss} - P_{draw}$$
-
-A stąd, szybkość zmiany temperatury $\frac{dT}{dt}$:
-
-$$\frac{dT}{dt} = \frac{P_{in} - P_{loss} - P_{draw}}{C}$$
-
-### B. Składowe Mocy (P)
-
-| Symbol | Nazwa | Wzór | Wyjaśnienie |
+| Zmienna Python | Symbol Mat. | Jednostka | Opis |
 | :--- | :--- | :--- | :--- |
-| $P_{in}$ | Moc Grzałki | $P_{in}$ (ze sterowania PID) | Moc dostarczana przez grzałkę (sterowanie). |
-| $P_{loss}$ | Straty Ciepła | $k_{loss} \cdot (T - T_{out})$ | Moc tracona do otoczenia. Jest proporcjonalna do różnicy temperatury wody ($T$) i otoczenia ($T_{out}$), z uwzględnieniem współczynnika strat $k_{loss}$. |
-| $P_{draw}$ | Moc Stracona na Pobór | $k_{draw} \cdot q_{out} \cdot (T - T_{cold})$ | Moc tracona z powodu wypływu gorącej wody ($T$) i wpływu zimnej wody ($T_{cold}$). Zależy od przepływu $q_{out}$ i stałej $k_{draw}$ (wzór uproszczony, $k_{draw}$ jest w przybliżeniu równe ciepłu właściwemu wody $c_w$). |
+| `C` | $C$ | $J/^\circ C$ | **Pojemność cieplna.** Ilość energii potrzebna do ogrzania całego bojlera o 1 stopień. Obliczana jako $V \cdot \rho \cdot c_p$. |
+| `k_loss` | $k_{loss}$ | $W/^\circ C$ | **Współczynnik strat postojowych.** Określa jakość izolacji termicznej. Im mniejsza wartość, tym lepsza izolacja. |
+| `k_draw` | $k_{draw}$ | $\frac{W}{^\circ C \cdot (l/s)}$ | **Współczynnik strat przepływowych.** Stała fizyczna wynikająca z ciepła właściwego wody ($\approx 4186$). Określa koszt energetyczny podgrzewania przepływającej wody. |
+| `T_out` | $T_{out}$ | $^\circ C$ | **Temperatura otoczenia.** Temperatura powietrza wokół bojlera (np. w łazience). |
+| `T_cold` | $T_{cold}$ | $^\circ C$ | **Temperatura zimnej wody.** Temperatura wody zasilającej z sieci wodociągowej. |
 
-### C. Dyskretny Krok Czasowy (Metoda Eulera)
+### Parametry Regulatora PID
 
-W symulacji używamy prostego przybliżenia Eulera do obliczenia nowej temperatury po kroku $dt$:
+| Zmienna | Symbol | Opis |
+| :--- | :--- | :--- |
+| `Kp` | $K_p$ | **Wzmocnienie proporcjonalne.** Decyduje o tym, jak agresywnie regulator reaguje na bieżący błąd. |
+| `Ti` | $T_i$ | **Czas zdwojenia (stała czasowa całkowania).** Wpływa na siłę członu całkującego ($K_i = K_p / T_i$). Eliminuje uchyb ustalony. |
+| `Td` | $T_d$ | **Czas wyprzedzenia (stała czasowa różniczkowania).** Wpływa na człon różniczkujący ($K_d = K_p \cdot T_d$). Tłumi oscylacje i reaguje na szybkość zmian. |
+| `T_set` | $T_{set}$ | **Wartość zadana.** Docelowa temperatura wody, którą chcemy utrzymać. |
 
-$$T_{next} = T + \Delta T = T + \frac{dT}{dt} \cdot dt$$
+### Zmienne Symulacji (`boiler_step` / `simulate`)
+
+| Zmienna | Jednostka | Opis |
+| :--- | :--- | :--- |
+| `dt` | $s$ | **Krok czasowy.** Rozdzielczość czasowa symulacji (np. 1.0 sekunda). |
+| `total_time` | $s$ | Całkowity czas trwania symulacji. |
+| `T` | $^\circ C$ | Aktualna temperatura wody w danej chwili. |
+| `P_in` | $W$ | Aktualna moc dostarczana przez grzałkę (sterowanie). |
+| `q_out` | $l/s$ | Aktualny przepływ wody użytkowej (zakłócenie, np. odkręcony kran). |
+| `e` | $^\circ C$ | Uchyb regulacji ($T_{set} - T$). |
+| `integ` | $^\circ C \cdot s$ | Skumulowana suma błędów (pamięć regulatora dla członu I). |
 
 ---
 
-## 2. 🤖 Algorytm Regulatora PID (`simulate_boiler_pid`)
+## 4. Struktura Kodu
 
-Regulator oblicza moc grzałki ($P_{in}$) w oparciu o **uchyb regulacji** $e$, czyli różnicę między temperaturą zadaną ($T_{set}$) a aktualną ($T$).
+* `BoilerParams`: Dataclass przechowująca stałe parametry fizyczne obiektu.
+* `boiler_step()`: Funkcja realizująca jeden krok całkowania numerycznego (fizyka).
+* `simulate_boiler_pid()`: Główna pętla symulacji łącząca regulator PID z modelem fizycznym.
+* `run_simulation()`: Funkcja pomocnicza (wrapper), która ułatwia uruchomienie symulacji z parametrami użytkowymi (pojemność w litrach, przepływ w l/min).
 
-$$e = T_{set} - T$$
+## 5. Wymagania
 
-Sygnał sterujący $u$ (moc grzałki przed nasyceniem) jest sumą trzech członów: P, I i D.
-
-$$u = P_{term} + I_{term} + D_{term}$$
-
-### A. Człon Proporcjonalny (P)
-
-Reaguje na **aktualny uchyb**:
-
-$$P_{term} = K_p \cdot e$$
-
-### B. Człon Całkujący (I)
-
-Reaguje na **całkowity uchyb z przeszłości** (eliminuje uchyb ustalony). Wykorzystuje wzmocnienie całkujące $K_i$:
-
-$$I_{term} = K_i \cdot \text{integ}$$
-gdzie:
-$$\text{integ} = \int e(\tau) d\tau$$
-a dla dyskretnej symulacji $\text{integ}$ jest przybliżane jako suma prostokątów:
-$$\text{integ}_{k+1} = \text{integ}_k + e \cdot dt$$
-**Parametr:** $K_i = \frac{K_p}{T_i}$
-
-#### Anti-Windup
-W symulacji zastosowano mechanizm **Anti-Windup**. Zapobiega on nadmiernemu "nawinięciu" całki, gdy moc grzałki jest już nasycona ($P_{in} = P_{max}$). Całka jest blokowana lub regulowana, gdy wyjście regulatora $u$ przekracza $P_{max}$ lub spada poniżej $0$, co zapobiega dużym przeregulowaniom.
-
-### C. Człon Różniczkujący (D)
-
-Reaguje na **szybkość zmian uchybu** (przewiduje przyszłe zmiany). Wykorzystuje wzmocnienie różniczkujące $K_d$:
-
-$$D_{term} = K_d \cdot \frac{de}{dt}$$
-a dla dyskretnej symulacji różniczkę przybliża się różnicą wsteczną:
-$$D_{term} = K_d \cdot \frac{e - e_{prev}}{dt}$$
-**Parametr:** $K_d = K_p \cdot T_d$
-
-### D. Nasycenie (Ograniczenie Wyjścia)
-
-Ostateczny sygnał sterujący $P_{in}$ (rzeczywista moc grzałki) jest ograniczony fizycznymi możliwościami grzałki $P_{max}$ i $0$:
-
-$$P_{in} = \max(0.0, \min(u, P_{max}))$$
+* Python 3.7+
+* `pandas` (do zbierania i analizy wyników)
+* `dataclasses` (standardowa biblioteka)

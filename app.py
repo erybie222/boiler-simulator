@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from boiler import run_simulation
 
 
-app = dash.Dash(__name__)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 app.layout= html.Div(
     style={"maxWidth": "2000px", "margin": "0 auto", "fontFamily": "Arial", "marginBottom": "50px"},
@@ -24,11 +24,13 @@ app.layout= html.Div(
                     {"label": "Duży (120l, 3500W)", "value": "large"},],
                     id="slider-volume",
                     value="medium",
+                    clearable=False,
+                    searchable=False,
                     style={"marginBottom": "50px"},
                 ),
                 html.Label("Temperatura zadana wody w bojlerze - T[°C]"),
                 dcc.Slider(id="slider-T-set", min=30, max=70, step=1, value=50, marks={i: str(i) for i in range(30, 71, 10)}, tooltip={"placement": "bottom", "always_visible": True},),
-            ]),
+            ], width=6),
             dbc.Col([
                 html.Br(),
                 html.Label("Wzmocnienie proporcjonalne Kp"),
@@ -66,7 +68,7 @@ app.layout= html.Div(
                     tooltip={"placement": "bottom", "always_visible": True},
                 ),
 
-            ]),
+            ], width=6),
         ]),
         dbc.Row(dcc.Graph(
             id="boiler-graph",

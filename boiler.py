@@ -131,6 +131,9 @@ params_default = BoilerParams(
 DT = 1.0
 TOTAL_TIME = 18000
 P_MAX = 2000.0
+FLOW_L_PER_MIN = 6.0
+SHOWER_START_S = 10000.0
+SHOWER_END_S = 12000.0
 
 
 def q_out_profile_default(t: float) -> float:
@@ -154,9 +157,6 @@ def run_simulation(
     Td: float = 0.0,
     P_max: float = P_MAX,
     volume_l: float = 50.0,
-    flow_l_per_min: float = 6.0,
-    shower_start_s: float = 10000.0,
-    shower_end_s: float = 12000.0,
 ) -> pd.DataFrame:
     C_dynamic = float(volume_l) * 4186.0
 
@@ -172,8 +172,8 @@ def run_simulation(
         T_cold=params_default.T_cold,
     )
 
-    flow_lps = float(flow_l_per_min) / 60.0
-    q_profile = make_q_out_profile(flow_lps, float(shower_start_s), float(shower_end_s))
+    flow_lps = FLOW_L_PER_MIN / 60.0
+    q_profile = make_q_out_profile(flow_lps, SHOWER_START_S, SHOWER_END_S)
 
     return simulate_boiler_pid(
         T_set=T_set,

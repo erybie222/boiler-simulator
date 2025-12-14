@@ -106,13 +106,14 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
     )
 
     fig = make_subplots(
-        rows=2, cols=1,
+        rows=3, cols=1,
         shared_xaxes=False,
-        vertical_spacing=0.05,
-        row_heights=[0.5, 0.5],
+        vertical_spacing=0.06,
+        row_heights=[0.4, 0.35, 0.25],
         subplot_titles=(
             f"Temperatura wody [°C]",
-            "Składowe PID [W]"
+            "Składowe PID [W]",
+            "Ciepło grzałki [kJ]"
         )
     )
 
@@ -161,8 +162,15 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
         row=2, col=1
     )
 
+    fig.add_trace(
+        go.Scatter(x=df["time"], y=df["energy"], name="Ciepło grzałki",
+                   line=dict(color="purple")),
+        row=3, col=1
+    )
+
     fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=1, col=1)
     fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=2, col=1)
+    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=3, col=1)
 
     fig.update_layout(
         height=1540,
@@ -176,6 +184,7 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
 
     fig.update_yaxes(title_text="°C", row=1, col=1)
     fig.update_yaxes(title_text="W", row=2, col=1)
+    fig.update_yaxes(title_text="kJ", row=3, col=1)
 
     return fig
 

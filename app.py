@@ -5,7 +5,7 @@ import dash_bootstrap_components as dbc
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
-from boiler import run_simulation
+from boiler import run_simulation, SHOWER_START_S, SHOWER_END_S
 
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -72,7 +72,7 @@ app.layout= html.Div(
         ]),
         dbc.Row(dcc.Graph(
             id="boiler-graph",
-            style={"height": "1800px"},
+            style={"height": "1260px"},
             config={"responsive": True}
         ),)
     ]
@@ -106,15 +106,13 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
     )
 
     fig = make_subplots(
-        rows=4, cols=1,
+        rows=2, cols=1,
         shared_xaxes=False,
         vertical_spacing=0.05,
-        row_heights=[0.3, 0.25, 0.25, 0.2],
+        row_heights=[0.5, 0.5],
         subplot_titles=(
             f"Temperatura wody [°C]",
-            "Moc grzałki [W]",
-            "Składowe PID [W]",
-            "Pobór wody [l/s]"
+            "Składowe PID [W]"
         )
     )
 
@@ -123,39 +121,51 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
         row=1, col=1
     )
 
+    # Pionowe przerywane linie pokazujące początek i koniec poboru wody
+    temp_min = df["temperature"].min()
+    temp_max = df["temperature"].max()
     fig.add_trace(
-        go.Scatter(x=df["time"], y=df["power"], name="Moc grzałki"),
-        row=2, col=1
+        go.Scatter(
+            x=[SHOWER_START_S, SHOWER_START_S],
+            y=[temp_min, temp_max],
+            mode="lines",
+            name="Początek poboru",
+            line=dict(color="orange", dash="dash", width=2),
+        ),
+        row=1, col=1
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[SHOWER_END_S, SHOWER_END_S],
+            y=[temp_min, temp_max],
+            mode="lines",
+            name="Koniec poboru",
+            line=dict(color="orange", dash="dash", width=2),
+        ),
+        row=1, col=1
     )
 
     fig.add_trace(
         go.Scatter(x=df["time"], y=df["P_term"], name="P (proporcjonalny)",
                    line=dict(color="red")),
-        row=3, col=1
+        row=2, col=1
     )
     fig.add_trace(
         go.Scatter(x=df["time"], y=df["I_term"], name="I (całkujący)",
                    line=dict(color="green")),
-        row=3, col=1
+        row=2, col=1
     )
     fig.add_trace(
         go.Scatter(x=df["time"], y=df["D_term"], name="D (różniczkujący)",
                    line=dict(color="blue")),
-        row=3, col=1
-    )
-
-    fig.add_trace(
-        go.Scatter(x=df["time"], y=df["q_out"], name="Pobór wody"),
-        row=4, col=1
+        row=2, col=1
     )
 
     fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=1, col=1)
     fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=2, col=1)
-    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=3, col=1)
-    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=4, col=1)
 
     fig.update_layout(
-        height=2200,
+        height=1540,
         showlegend=True,
         margin=dict(l=60, r=40, t=40, b=40),
         legend=dict(
@@ -166,8 +176,6 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
 
     fig.update_yaxes(title_text="°C", row=1, col=1)
     fig.update_yaxes(title_text="W", row=2, col=1)
-    fig.update_yaxes(title_text="W", row=3, col=1)
-    fig.update_yaxes(title_text="l/s", row=4, col=1)
 
     return fig
 

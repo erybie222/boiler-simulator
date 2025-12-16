@@ -53,6 +53,7 @@ def simulate_boiler_pid(
     P_term_hist = [0.0]
     I_term_hist = [0.0]
     D_term_hist = [0.0]
+    energy_hist = [0.0]  # Skumulowana energia [kJ]
 
     integ = 0.0
     e_prev = T_set - T
@@ -108,6 +109,8 @@ def simulate_boiler_pid(
         P_term_hist.append(P_term)
         I_term_hist.append(I_term)
         D_term_hist.append(D_term)
+        # Energia = poprzednia energia + moc * czas [W * s = J], dzielone przez 1000 -> kJ
+        energy_hist.append(energy_hist[-1] + P_in * dt / 1000.0)
 
     return pd.DataFrame({
         "time": time_hist,
@@ -117,6 +120,7 @@ def simulate_boiler_pid(
         "P_term": P_term_hist,
         "I_term": I_term_hist,
         "D_term": D_term_hist,
+        "energy": energy_hist,
     })
 
 

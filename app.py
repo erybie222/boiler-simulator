@@ -11,7 +11,7 @@ from boiler import run_simulation, SHOWER_START_S, SHOWER_END_S
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 app.layout= html.Div(
-    style={"maxWidth": "2000px", "margin": "0 auto", "fontFamily": "Arial", "marginBottom": "50px"},
+    style={"maxWidth": "2000px", "margin": "0 auto", "fontFamily": "Arial", "marginBottom": "50px", "marginTop": "20px", "marginLeft": "100px", "marginRight": "50px"},
     children=[
         html.H1("Symulacja bojlera", style={"textAlign": "center"}),
         dbc.Row([
@@ -29,7 +29,7 @@ app.layout= html.Div(
                     style={"marginBottom": "50px"},
                 ),
                 html.Label("Temperatura zadana wody w bojlerze - T[°C]"),
-                dcc.Slider(id="slider-T-set", min=30, max=70, step=1, value=50, marks={i: str(i) for i in range(30, 71, 10)}, tooltip={"placement": "bottom", "always_visible": True},),
+                dcc.Slider(id="slider-T-set", min=30, max=80, step=1, value=50, marks={i: str(i) for i in range(30, 81, 10)}, tooltip={"placement": "bottom", "always_visible": True},),
             ], width=6),
             dbc.Col([
                 html.Br(),
@@ -122,7 +122,6 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
         row=1, col=1
     )
 
-    # Pionowe przerywane linie pokazujące początek i koniec poboru wody
     temp_min = df["temperature"].min()
     temp_max = df["temperature"].max()
     fig.add_trace(
@@ -175,7 +174,7 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
     fig.update_layout(
         height=1540,
         showlegend=True,
-        margin=dict(l=60, r=40, t=40, b=40),
+        margin=dict(l=0, r=40, t=40, b=40),
         legend=dict(
             font=dict(size=16),
             itemsizing='constant',

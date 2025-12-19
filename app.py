@@ -1,6 +1,6 @@
 import dash
 from dash import dcc, html
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -30,6 +30,17 @@ app.layout= html.Div(
                 ),
                 html.Label("Temperatura zadana wody w bojlerze - T[°C]"),
                 dcc.Slider(id="slider-T-set", min=30, max=80, step=1, value=50, marks={i: str(i) for i in range(30, 81, 10)}, tooltip={"placement": "bottom", "always_visible": True},),
+                html.Div(
+                    dbc.Button(
+                        "Zastosuj",
+                        id="apply-button",
+                        color="primary",
+                        n_clicks=0,
+                        size="lg",
+                        style={"fontSize": "18px", "width": "220px", "height": "48px"},
+                    ),
+                    style={"textAlign": "center", "marginTop": "12px", "marginBottom": "12px"},
+                ),
             ], width=6),
             dbc.Col([
                 html.Br(),
@@ -37,10 +48,10 @@ app.layout= html.Div(
                 dcc.Slider(
                     id="slider-Kp",
                     min=10,
-                    max=300,
-                    step=10,
-                    value=80,
-                    marks={i: str(i) for i in range(0, 301, 50)},
+                    max=1000,
+                    step=5,
+                    value=450,
+                    marks={i: str(i) for i in range(0, 1001, 100)},
                     tooltip={"placement": "bottom", "always_visible": True},
                 ),
 
@@ -49,46 +60,49 @@ app.layout= html.Div(
                 dcc.Slider(
                     id="slider-Ti",
                     min=50,
-                    max=1500,
+                    max=5000,
                     step=50,
-                    value=400,
-                    marks={i: str(i) for i in range(0, 1501, 300)},
+                    value=1200,
+                    marks={i: str(i) for i in range(0, 5001, 500)},
                     tooltip={"placement": "bottom", "always_visible": True},
                 ),
 
                 html.Br(),
-                html.Label("Stała wyprzedzenia - Td [s]"),
+                html.Label("Czas wyprzedzenia - Td [s]"),
                 dcc.Slider(
                     id="slider-Td",
                     min=0,
-                    max=60,
+                    max=300,
                     step=5,
-                    value=15,
-                    marks={i: str(i) for i in range(0, 61, 10)},
+                    value=150,
+                    marks={i: str(i) for i in range(0, 301, 50)},
                     tooltip={"placement": "bottom", "always_visible": True},
                 ),
 
             ], width=6),
-        ]),
+         ]),
         dbc.Row(dcc.Graph(
-            id="boiler-graph",
-            style={"height": "1260px"},
-            config={"responsive": True}
-        ),)
-    ]
-)
+             id="boiler-graph",
+             style={"height": "1260px"},
+             config={"responsive": True}
+         ),)
+     ]
+ )
 
 @app.callback(
     Output("boiler-graph", "figure"),
     [
-        Input("slider-T-set", "value"),
-        Input("slider-Kp", "value"),
-        Input("slider-Ti", "value"),
-        Input("slider-Td", "value"),
-        Input("slider-volume", "value"),
+        Input("apply-button", "n_clicks"),
+    ],
+    [
+        State("slider-T-set", "value"),
+        State("slider-Kp", "value"),
+        State("slider-Ti", "value"),
+        State("slider-Td", "value"),
+        State("slider-volume", "value"),
     ]
 )
-def update_graph(T_set, Kp, Ti, Td, volume_type):
+def update_graph(n_clicks, T_set, Kp, Ti, Td, volume_type):
     volume_map = {
         "small": (50.0, 2000.0),
         "medium": (80.0, 3000.0),
@@ -106,14 +120,13 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
     )
 
     fig = make_subplots(
-        rows=3, cols=1,
+        rows=2, cols=1,
         shared_xaxes=False,
-        vertical_spacing=0.06,
-        row_heights=[0.4, 0.35, 0.25],
+        vertical_spacing=0.1,
+        row_heights=[0.65, 0.35],
         subplot_titles=(
             f"Temperatura wody [°C]",
-            "Składowe PID [W]",
-            "Ciepło grzałki [kJ]"
+            "Bilans ciepła [kJ]"
         )
     )
 
@@ -146,30 +159,36 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
     )
 
     fig.add_trace(
-        go.Scatter(x=df["time"], y=df["P_term"], name="P (proporcjonalny)",
-                   line=dict(color="red")),
-        row=2, col=1
-    )
-    fig.add_trace(
-        go.Scatter(x=df["time"], y=df["I_term"], name="I (całkujący)",
-                   line=dict(color="green")),
-        row=2, col=1
-    )
-    fig.add_trace(
-        go.Scatter(x=df["time"], y=df["D_term"], name="D (różniczkujący)",
-                   line=dict(color="blue")),
-        row=2, col=1
+        go.Scatter(
+            x=df["time"],
+            y=[float(T_set)] * len(df),
+            mode="lines",
+            name="Temperatura zadana",
+            line=dict(color="red", dash="dash", width=2),
+        ),
+        row=1, col=1
     )
 
     fig.add_trace(
-        go.Scatter(x=df["time"], y=df["energy"], name="Ciepło grzałki",
+        go.Scatter(x=df["time"], y=df["energy"], name="Ciepło oddane grzałki",
                    line=dict(color="purple")),
-        row=3, col=1
+        row=2, col=1
     )
+    if "energy_loss" in df.columns:
+        fig.add_trace(
+            go.Scatter(x=df["time"], y=df["energy_loss"], name="Ciepło stracone do otoczenia",
+                       line=dict(color="red",)),
+            row=2, col=1
+        )
+    if "energy_draw" in df.columns:
+        fig.add_trace(
+            go.Scatter(x=df["time"], y=df["energy_draw"], name="Ciepło pobrane przez użytkownika",
+                       line=dict(color="blue",)),
+            row=2, col=1
+        )
 
     fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=1, col=1)
     fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=2, col=1)
-    fig.update_xaxes(title_text="czas [s]", showticklabels=True, row=3, col=1)
 
     fig.update_layout(
         height=1540,
@@ -182,8 +201,7 @@ def update_graph(T_set, Kp, Ti, Td, volume_type):
     )
 
     fig.update_yaxes(title_text="°C", row=1, col=1)
-    fig.update_yaxes(title_text="W", row=2, col=1)
-    fig.update_yaxes(title_text="kJ", row=3, col=1)
+    fig.update_yaxes(title_text="kJ", row=2, col=1)
 
     return fig
 

@@ -54,15 +54,17 @@ def simulate_boiler_pid(
     I_term_hist = [0.0]
     D_term_hist = [0.0]
     energy_hist = [0.0]
+    P_loss_hist = [0.0]
+    P_draw_hist = [0.0]
+    # cumulative energies in kJ
+    energy_loss_hist = [0.0]
+    energy_draw_hist = [0.0]
 
     integ = 0.0
     e_prev = T_set - T
 
     Ki = Kp / Ti if Ti > 0.0 else 0.0
     Kd = Kp * Td if Td > 0.0 else 0.0
-
-    P_loss_estimated = params.k_loss * (T_set - params.T_out)
-    integ_max = P_loss_estimated / Ki if Ki > 0.0 else float('inf')
 
     for k in range(n):
         t = (k + 1) * dt
@@ -77,28 +79,19 @@ def simulate_boiler_pid(
         e = T_set - T
 
         P_term = Kp * e
-
-        I_term = Ki * integ if Ki > 0.0 else 0.0
-
-        D_term = Kd * (e - e_prev) / dt if Kd > 0.0 else 0.0
+        I_term = Ki * integ
+        D_term = Kd * (e - e_prev) / dt
 
         u = P_term + I_term + D_term
 
         P_in = max(0.0, min(u, P_max))
-
-        if Ki > 0.0:
-            saturated_high = (P_in >= P_max) and (e > 0)
-            saturated_low = (P_in <= 0) and (e < 0)
-
-            if not (saturated_high or saturated_low):
-                integ += e * dt
-
-            if e < 5.0:
-                scale = max(0.0, e / 5.0)
-                current_limit = integ_max * (1.0 + scale)
-                integ = max(-current_limit, min(integ, current_limit))
-
+        if P_in < P_max and P_in > 0:
+            integ += e * dt
+        #iinteg += e * dt
         e_prev = e
+
+        P_loss = params.k_loss * (T - params.T_out)
+        P_draw = params.k_draw * q_out * (T - params.T_cold)
 
         T = boiler_step(T, P_in, q_out, params, dt)
 
@@ -109,7 +102,12 @@ def simulate_boiler_pid(
         P_term_hist.append(P_term)
         I_term_hist.append(I_term)
         D_term_hist.append(D_term)
+        P_loss_hist.append(P_loss)
+        P_draw_hist.append(P_draw)
+        # accumulate energies (convert W*s to kJ by dividing by 1000)
         energy_hist.append(energy_hist[-1] + P_in * dt / 1000.0)
+        energy_loss_hist.append(energy_loss_hist[-1] + P_loss * dt / 1000.0)
+        energy_draw_hist.append(energy_draw_hist[-1] + P_draw * dt / 1000.0)
 
     return pd.DataFrame({
         "time": time_hist,
@@ -119,7 +117,11 @@ def simulate_boiler_pid(
         "P_term": P_term_hist,
         "I_term": I_term_hist,
         "D_term": D_term_hist,
+        "P_loss": P_loss_hist,
+        "P_draw": P_draw_hist,
         "energy": energy_hist,
+        "energy_loss": energy_loss_hist,
+        "energy_draw": energy_draw_hist,
     })
 
 
